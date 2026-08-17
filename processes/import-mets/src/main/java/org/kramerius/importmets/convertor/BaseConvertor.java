@@ -103,6 +103,8 @@ public abstract class BaseConvertor {
 
     protected static final String MODEL_MONOGRAPH_UNIT = "model:monographunit";
 
+    protected static final String MODEL_CONVOLUTE = "model:convolute";
+
     protected static final String MODEL_PERIODICAL = "model:periodical";
 
     protected static final String MODEL_PERIODICAL_VOLUME = "model:periodicalvolume";

@@ -362,9 +362,6 @@ public class MetsPeriodicalConvertor extends BaseConvertor {
             return null;//we consider only div with associated metadata (DMDID)
         }
 
-        String model = mapModel(divType, false);
-
-
         String modsId = modsIdObj.getID();
         String dcId = modsId.replaceFirst("MODS", "DC");
 
@@ -372,6 +369,9 @@ public class MetsPeriodicalConvertor extends BaseConvertor {
         if (mods == null) {
             throw new ServiceException("Cannot find mods: " + modsId);
         }
+
+        OaiDcType dc = dcMap.get(dcId);
+        String model = mapModel(divType, false, parentModel, mods, dc);
 
 
         String uuid = getUUIDfromMods(mods);
@@ -384,7 +384,6 @@ public class MetsPeriodicalConvertor extends BaseConvertor {
 
         re.addRelation(RelsExt.POLICY, policyID, true);
 
-        OaiDcType dc = dcMap.get(dcId);
         if (dc == null) {
             log.warn("DublinCore part missing for MODS " + modsId);
             dc = createDC(pid, title);
@@ -398,7 +397,7 @@ public class MetsPeriodicalConvertor extends BaseConvertor {
         foxml.setMods(mods);
         foxml.setRe(re);
         if (parent != null) {
-            String parentRelation = mapParentRelation(model);
+            String parentRelation = mapParentRelation(parentModel, model);
 //            if (RelsExt.CONTAINS_TRACK.equalsIgnoreCase(parentRelation)&& MODEL_SOUND_RECORDING.equalsIgnoreCase(parentModel)){
 //                parent.getRe().addRelation(RelsExt.HAS_TRACK, pid, false);
 //            } else {
@@ -489,6 +488,17 @@ public class MetsPeriodicalConvertor extends BaseConvertor {
     private Genre specialGenre = Genre.NONE;
 
     private String mapModel(String divType, boolean isElectronic) {
+        return mapModel(divType, isElectronic, null, null, null);
+    }
+
+    private String mapModel(String divType, boolean isElectronic, String parentModel,
+                            ModsDefinition mods, OaiDcType dc) {
+        if (MODEL_CONVOLUTE.equals(parentModel)) {
+            if ("VOLUME".equalsIgnoreCase(divType)) {
+                return resolveConvoluteVolumeModel(mods, dc);
+            }
+            throw new ServiceException("Unsupported convolute unit type: " + divType);
+        }
         if ("PERIODICAL_TITLE".equalsIgnoreCase(divType)) {
             return MODEL_PERIODICAL;
         } else if ("PERIODICAL_VOLUME".equalsIgnoreCase(divType)) {
@@ -513,6 +523,8 @@ public class MetsPeriodicalConvertor extends BaseConvertor {
             return MODEL_INTERNAL_PART;
         } else if ("MONOGRAPH".equalsIgnoreCase(divType)) {
             return checkSpecialGenreOrMonograph();
+        } else if ("CONVOLUTE".equalsIgnoreCase(divType)) {
+            return MODEL_CONVOLUTE;
             //emonography
         } else if ("TITLE".equalsIgnoreCase(divType) && isElectronic) {
             return MODEL_MONOGRAPH;
@@ -532,6 +544,55 @@ public class MetsPeriodicalConvertor extends BaseConvertor {
         throw new ServiceException("Unsupported div type in logical structure: " + divType);
     }
 
+    private String resolveConvoluteVolumeModel(ModsDefinition mods, OaiDcType dc) {
+        String dcModel = getModelFromDc(dc);
+        Genre modsGenre = getGenrefromMods(mods);
+        String specialModsModel = modelFromSpecialGenre(modsGenre);
+
+        if (dcModel != null) {
+            if (!isSupportedConvoluteModel(dcModel)) {
+                throw new ServiceException("Unsupported DC model in convolute volume: " + dcModel);
+            }
+            if (specialModsModel != null && !specialModsModel.equalsIgnoreCase(dcModel)) {
+                throw new ServiceException("Conflicting DC model and MODS genre in convolute volume: "
+                        + dcModel + " vs " + specialModsModel);
+            }
+            return dcModel;
+        }
+        return specialModsModel != null ? specialModsModel : MODEL_MONOGRAPH;
+    }
+
+    private String getModelFromDc(OaiDcType dc) {
+        if (dc == null) return null;
+        String result = null;
+        for (JAXBElement<ElementType> el : dc.getTitleOrCreatorOrSubject()) {
+            String value = el.getValue().getValue();
+            if ("type".equalsIgnoreCase(el.getName().getLocalPart())
+                    && value != null && value.startsWith("model:")) {
+                if (result != null && !result.equalsIgnoreCase(value)) {
+                    throw new ServiceException("Multiple DC models in convolute volume: "
+                            + result + ", " + value);
+                }
+                result = value;
+            }
+        }
+        return result;
+    }
+
+    private String modelFromSpecialGenre(Genre genre) {
+        if (Genre.CARTOGRAPHIC.equals(genre)) return MODEL_MAP;
+        if (Genre.SHEETMUSIC.equals(genre)) return MODEL_SHEETMUSIC;
+        if (Genre.GRAPHIC.equals(genre)) return MODEL_GRAPHIC;
+        return null;
+    }
+
+    private boolean isSupportedConvoluteModel(String model) {
+        return MODEL_MONOGRAPH.equalsIgnoreCase(model)
+                || MODEL_MAP.equalsIgnoreCase(model)
+                || MODEL_GRAPHIC.equalsIgnoreCase(model)
+                || MODEL_SHEETMUSIC.equalsIgnoreCase(model);
+    }
+
     /**
      * If special genre (cartographic or sheetmusic) was detected in MODS, return MODEL MAP or SHEETMUSIC, otherwise return default model MONOGRAPH
      */
@@ -546,8 +607,16 @@ public class MetsPeriodicalConvertor extends BaseConvertor {
         return MODEL_MONOGRAPH;
     }
 
-    private String mapParentRelation(String model) {
-        if (MODEL_PERIODICAL_VOLUME.equalsIgnoreCase(model)) {
+    private String mapParentRelation(String parentModel, String model) {
+        if (MODEL_CONVOLUTE.equalsIgnoreCase(parentModel)) {
+            if (MODEL_MONOGRAPH.equalsIgnoreCase(model)
+                    || MODEL_MAP.equalsIgnoreCase(model)
+                    || MODEL_GRAPHIC.equalsIgnoreCase(model)
+                    || MODEL_SHEETMUSIC.equalsIgnoreCase(model)) {
+                return RelsExt.HAS_UNIT;
+            }
+            throw new ServiceException("Unsupported model in convolute: " + model);
+        } else if (MODEL_PERIODICAL_VOLUME.equalsIgnoreCase(model)) {
             return RelsExt.HAS_VOLUME;
         } else if (MODEL_PERIODICAL_ITEM.equalsIgnoreCase(model)) {
             return RelsExt.HAS_ITEM;
@@ -567,6 +636,10 @@ public class MetsPeriodicalConvertor extends BaseConvertor {
             return RelsExt.CONTAINS_TRACK;
         }
         throw new ServiceException("Unsupported model mapping in logical structure: " + model);
+    }
+
+    private String mapParentRelation(String model) {
+        return mapParentRelation(null, model);
     }
 
 
