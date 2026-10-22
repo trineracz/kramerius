@@ -98,7 +98,7 @@ jib {
         }
     }
     to {
-        image = "ceskaexpedice/curator-worker:${version}"
+        image = "trinera/k7pp-curator-worker:${version}-dev"
     }
 
     extraDirectories {
