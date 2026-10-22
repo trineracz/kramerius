@@ -215,7 +215,7 @@ jib {
         }
     }
     to {
-        image = "ceskaexpedice/kramerius:${version}"
+        image = "trinera/kramerius:${version}"
     }
     container {
         appRoot = '/usr/local/tomcat/webapps/search'
