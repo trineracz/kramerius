@@ -34,6 +34,8 @@ import cz.incad.kramerius.rest.api.exceptions.ActionNotAllowed;
 import cz.incad.kramerius.rest.api.exceptions.BadRequestException;
 import cz.incad.kramerius.rest.apiNew.client.v70.ItemsResource;
 import cz.incad.kramerius.iiif.IIIFRequestGuard;
+import cz.incad.kramerius.statistics.ImageAccessKind;
+import cz.incad.kramerius.statistics.ImageAccessLogPolicy;
 import cz.incad.kramerius.iiif.IIIFUtils;
 import cz.incad.kramerius.security.RightsResolver;
 import cz.incad.kramerius.security.SecuredActions;
@@ -87,7 +89,7 @@ public class CDKIIIFResource extends AbstractTileResource {
 
             if (permitted(pid)) {
                 try {
-                    reportAccess(aggregatedAccessLogs, pid);
+                    reportAccess(aggregatedAccessLogs, pid, ImageAccessKind.IIIF_INFO);
                     String u = IIIFUtils.iiifImageEndpoint(pid, akubraRepository);
                     if (u != null) {
                         if (!u.endsWith("/")) { u = u+"/"; }
@@ -164,6 +166,9 @@ public class CDKIIIFResource extends AbstractTileResource {
                 .getInt("iiif.tile.maxsize", IIIFRequestGuard.DEFAULT_MAX_TILE_SIZE);
         if (requiresFullReadCheck(region, size, maxTileSize) && !permitted(pid)) {
             throw new ActionNotAllowed("not allowed");
+        }
+        if (!ImageAccessLogPolicy.isViewerTile(region, size, rotation, qf + "." + format)) {
+            reportAccess(aggregatedAccessLogs, pid, ImageAccessKind.IIIF_REGION);
         }
 
         String u = IIIFUtils.iiifImageEndpoint(pid, akubraRepository);
