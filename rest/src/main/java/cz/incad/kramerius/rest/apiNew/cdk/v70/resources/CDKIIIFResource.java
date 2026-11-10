@@ -167,7 +167,7 @@ public class CDKIIIFResource extends AbstractTileResource {
         if (requiresFullReadCheck(region, size, maxTileSize) && !permitted(pid)) {
             throw new ActionNotAllowed("not allowed");
         }
-        if (!ImageAccessLogPolicy.isViewerTile(region, size, rotation, qf + "." + format)) {
+        if (!ImageAccessLogPolicy.isViewerTile(region, size, rotation, qf + "." + format, maxTileSize)) {
             reportAccess(aggregatedAccessLogs, pid, ImageAccessKind.IIIF_REGION);
         }
 
